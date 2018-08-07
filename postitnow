@@ -1,0 +1,210 @@
+#!/bin/bash
+
+# #Author mcdwayne 
+# #email 1dwayne.mcdaniel @ gmail.com
+# Version 1.0
+# Tested against WP v4.9.6
+
+# # DESCRIPTION
+# # Publish content to mcdwayne.com without leaving the terminal
+# # based on my personal workflow, find the last saved file in my BlogDrafts folder and post it
+# #
+# # Expecting a .md file or .txt written in markdown -- I use markdown-editor to exist
+# # First line should be title you want
+# # I am going to ask for the following: 
+# #
+# #     > Permalink you prefer, default is title
+# #
+# #     > The Featured Image
+# #
+# #  I am assuming I in fact did a git push right before running this, so let's bail if git is not up to date  
+
+
+# Set your variables here:   
+
+SITENAME=SiteNameOnPantheon  #CHANGE THIS! to your sitename on Pantheon
+
+ENV=PantheonEnvironment   #CHANGE THIS TOO! dev, test, live or a multidev env
+
+# feel free to hard code this.  I do locally
+
+SITEUUID=$(terminus site:info ${SITENAME} --field=id )
+
+
+# Let's find our what the permalink should look like?
+
+
+if [ -z "$1" ]; then
+	echo -n "Feed me a file or hit enter to sync last Github content " && read LOCALCOPY
+else  
+	LOCALCOPY=$1
+fi
+
+if [ -z "$2" ]; then
+	echo -n "What should the permalink be? : " && read POSTNAME 
+else
+	POSTNAME=$2
+fi
+
+#  And now let's get a Featured image from my localfile system
+
+if [ -z "$3" ]; then
+	echo -n "Drag and drop your image here now (typing might work too) : " && read HEROIMAGE 
+	echo -n "Please fill in Alt Text for image : " && read ALTTEXT 
+else
+	HEROIMAGE=$3
+	ALTTEXT="Sorry, alt-text needs reset"
+fi
+
+
+
+if [ -z $LOCALCOPY ]; then
+
+	LOCALCOPY=/Users/user/localfolder
+	GITHUBREPO='https://raw.githubusercontent.com/user/master/remotefolder/' 
+
+		cd ${LOCALCOPY}
+# I am assuming I in fact did a git push right before this step.  
+# So, let's check, and exit if not 
+
+GITSTATUS=$(git status)
+
+GITCLEAN="On branch master
+Your branch is up to date with 'origin/master'.
+
+nothing to commit, working tree clean"
+
+
+	if [[ ${GITSTATUS} != ${GITCLEAN} ]]; then
+		echo "We are not committed.  Git yourself clean"
+		exit 1
+ 	else
+ 		echo "Good to ship.  Shipping it"
+ 	fi
+	
+	
+
+# Get the loastest updated file name from the local directory and add it to the end of our github repo
+
+	POSTGITHUBADDRESS=$GITHUBREPO$(ls -tp | grep -v /$ | head -1)
+
+# Grab the first line and make that the title
+
+	POSTTITLE=$(curl ${POSTGITHUBADDRESS} | head -1 )
+
+# Terminus uses WP-CLI to pop that body into a new post
+# in proecess grab the body and make that, well, the body for the post
+# assuming this works we should get a post ID number back in the returned message
+
+
+	OUTPUT=$(curl ${POSTGITHUBADDRESS} | sed -n '1!p' | terminus wp ${SITENAME}.${ENV} -- post create --post_author=1 --post_title="${POSTTITLE}" --count=1 --post_status=publish - )
+
+else
+
+###POST FROM LOCAL
+
+	POSTTITLE=$(head -1 ${LOCALCOPY})
+
+
+
+# Terminus uses WP-CLI to pop that body into a new post
+# in proecess grab the body and make that, well, the body for the post
+# assuming this works we should get a post ID number back in the returned message
+
+
+	OUTPUT=$(cat ${LOCALCOPY} | sed -n '1!p' | terminus wp ${SITENAME}.${ENV} -- post create --post_author=1 --post_title="${POSTTITLE}" --count=1 --post_status=publish - )
+
+
+fi
+
+# OK now let's parse the actaual post id
+
+OUTPUT1=$(echo ${OUTPUT} | cut -d ' ' -f 4-)
+POSTID="${OUTPUT1%.*}"
+
+echo $POSTID
+
+# Update the permalink with the thing I manually asked for earlier
+# If blank, will default to null and permalink will be sanitized post title
+
+terminus wp ${SITENAME}.${ENV} -- post update ${POSTID} --post_name=${POSTNAME}
+
+
+#-------------TAGS SET
+#############
+############
+############ 
+
+#-------------Featured Image Section
+
+if [ -z ${HEROIMAGE} ]; then
+    echo -e "No featured image set"
+
+else 
+
+# Let's use the image you dragged in 
+
+# BUT if we didn;t pass one in, we are done, so let's exit if HEROIMAGE == NULL
+
+# Using rsync here to push it up to the Dev environment, since that is the only one I can write to for now.
+
+
+
+	rsync -rLvz --size-only --ipv4 --progress -e 'ssh -p 2222' ${HEROIMAGE} --temp-dir=~/tmp/ dev.${SITEUUID}@appserver.dev.${SITEUUID}.drush.in:files/
+
+#now that the image is in a place I can reach it from Terminus, let's import to the WP media library
+# at the same time, let's update the post with this hero image
+
+	terminus wp ${SITENAME}.${ENV} -- media import https://dev-${SITENAME}.pantheonsite.io/wp-content/uploads/${HEROIMAGE##/*/} --alt="${ALTTEXT}" --post_id=${POSTID} --title="${HEROIMAGE##/*/}" --featured_image
+
+
+# Let's get the post GUID for the image, so we can ference it directly later
+
+fi
+
+
+# End "Featured image" section
+
+
+
+echo ' '
+echo ' '
+echo ' '
+echo https://${ENV}-${SITENAME}.pantheonsite.io/${POSTNAME}
+echo ' '
+echo ' '
+echo ' '
+echo https://${ENV}-${SITENAME}.pantheonsite.io/${POSTNAME}
+
+####################
+####################
+# This section is an example of using my terminus plugin wpclonecontent to clone the content to the target environment
+# See: https://github.com/mcdwayne/terminus-wp-clone-content
+
+
+# terminus wpclonecontent ${SITENAME}.${ENV} ${SITENAME}.test ${POSTID}
+
+# echo ' '
+# echo ' '
+# echo ' '
+# echo https://test-${SITENAME}.pantheonsite.io/${POSTNAME}
+# echo ' '
+# echo ' '
+# echo ' '
+
+# terminus wpclonecontent ${SITENAME}.${ENV} ${SITENAME}.live ${POSTID}
+
+# echo ' '
+# echo ' '
+# echo ' '
+# echo https://live-${SITENAME}.pantheonsite.io/${POSTNAME}
+# echo ' '
+# echo ' '
+# echo ' '
+
+#######################
+#######################
+
+
+echo "Thanks for using postitnow to post your post"
+echo "Thanks for using postitnow to post your post"
