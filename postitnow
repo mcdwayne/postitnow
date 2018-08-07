@@ -91,12 +91,14 @@ fi
 
 ## Set tags by slug, can not get reliable terms in this way due to special character limits
 
+TAGS="blog"
+
 if [ -z "$5" ]; then
-	echo -n "What \"tags\" do you want to use? : (example: \"term1\", \"term2\", \"term3\") " && read TAGS 
+	echo -n "What \"tags\" do you want to use? : (example: \"term1\", \"term2\", \"term3\") " && read $TAGS 
 	## TODO:  Explain the slug reuse issue in the prompt...
 
 else
-	TAGS=$5
+	$TAGS=$5
 
 fi
 
@@ -139,8 +141,7 @@ nothing to commit, working tree clean"
 # in process grab the body and make that, well, the body for the post
 # assuming this works we should get a post ID number back in the returned message
 
-
-	OUTPUT=$(curl ${POSTGITHUBADDRESS} | sed -n '1!p' | terminus wp ${SITENAME}.${ENV} -- post create --post_author=1 --post_title="${POSTTITLE}" --count=1 --post_status=publish - )
+	POSTID=$(curl ${POSTGITHUBADDRESS} | sed -n '1!p' | terminus wp ${SITENAME}.${ENV} -- post create --post_author=1 --post_title="${POSTTITLE}" --count=1 --post_status=publish - --porcelain)
 
 else
 
@@ -231,7 +232,8 @@ terminus env:cc ${SITENAME}.${ENV}
  
 ####################
 ## This section is an example of using my terminus plugin wpclonecontent to clone the content to the target environment
-## See: https://github.com/mcdwayne/terminus-wp-clone-content
+## See: https://raw.githubusercontent.com/username/TopLevelFolder/master/(subfolder)
+
 
 # terminus wpclonecontent ${SITENAME}.${ENV} ${SITENAME}.test ${POSTID}
 
@@ -255,7 +257,7 @@ terminus env:cc ${SITENAME}.${ENV}
 ## In my mind, nested blocks are the likely culprit, especially if we hit states where what works on Dev will not work on Test (which should be identical clone of live every time) due to a number of factors, like plugin version or activation
 
 ### Now, there HAS to be a better path to this and I think it lies in updating another variable, but as for now, this just worked so I went with it
-### I am standing on the shoulders of giants here, mostly @ataylorme, Andrew Taylor and his amazing work, which was explained to me by @davidneedham, using this repo: 
+### I am standing on the shoulders of giants here, mostly @ataylorme, Andrew Taylor and his amazing work, which was explained to me by @davidneedham, using this repo: https://github.com/ataylorme/loopconf-2018-automated-update-workshop
 
 # cd ~/bin  ## this is where this lives for me. Not likely the smartest place in gerenal, but it works for me as this is main use case for this tool
 
