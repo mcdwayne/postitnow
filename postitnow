@@ -2,37 +2,51 @@
 
 # #Author mcdwayne 
 # #email 1dwayne.mcdaniel @ gmail.com
-# Version 1.0
-# Tested against WP v4.9.6
+# Version 1.1
+# Tested against: 
+#	WP v4.9.8, 
+# 	Terminus v1.8.1, 
+#	
+
 
 # # DESCRIPTION
 # # Publish content to mcdwayne.com without leaving the terminal
 # # based on my personal workflow, find the last saved file in my BlogDrafts folder and post it
 # #
-# # Expecting a .md file or .txt written in markdown -- I use markdown-editor to exist
+# # Expecting a file written in markdown 
 # # First line should be title you want
 # # I am going to ask for the following: 
+# #
+# #  	> A file location.  If left blank, going to pull from Github, assuming that is set
 # #
 # #     > Permalink you prefer, default is title
 # #
 # #     > The Featured Image
+# # 	
+# #		> Alt text for Image - fail if not set
+# #		
+# #		> Tags for the posts, is expecting slugs, if new slug will create term that is equal to slug
 # #
-# #  I am assuming I in fact did a git push right before running this, so let's bail if git is not up to date  
 
-
-# Set your variables here:   
+# Set your variables here:  
 
 SITENAME=SiteNameOnPantheon  #CHANGE THIS! to your sitename on Pantheon
 
 ENV=PantheonEnvironment   #CHANGE THIS TOO! dev, test, live or a multidev env
 
-# feel free to hard code this.  I do locally
+## This section assumes you will store content files locally AND push those to a public repository
+
+LOCALREPO=/localfolder
+
+GITHUBREPO='https://raw.githubusercontent.com/user/master/remotefolder/' 
+
+
+# Feel free to hard code this.  I do locally
 
 SITEUUID=$(terminus site:info ${SITENAME} --field=id )
 
 
-# Let's find our what the permalink should look like?
-
+# What file are we posting?  If you leave it blank it will post the last thing saved in the local directory if synced with Github
 
 if [ -z "$1" ]; then
 	echo -n "Feed me a file or hit enter to sync last Github content " && read LOCALCOPY
@@ -40,32 +54,62 @@ else
 	LOCALCOPY=$1
 fi
 
+# Let's find our what the permalink should look like?
+
 if [ -z "$2" ]; then
 	echo -n "What should the permalink be? : " && read POSTNAME 
 else
 	POSTNAME=$2
 fi
 
-#  And now let's get a Featured image from my localfile system
+if [ -z $POSTNAME ]; then
+	echo "Sorry, we need to set a permalink every time.  Please try again"
+	exit 1;
+fi
+
+#  And now let's get a Featured image from my localfile system or any URL
 
 if [ -z "$3" ]; then
 	echo -n "Drag and drop your image here now (typing might work too) : " && read HEROIMAGE 
 	echo -n "Please fill in Alt Text for image : " && read ALTTEXT 
 else
 	HEROIMAGE=$3
-	ALTTEXT="Sorry, alt-text needs reset"
+	ALTTEXT=$4
+fi
+
+## Setting Alt Text is not optional to me, so fail if not set
+
+if [ -n "$HEROIMAGE" ] &&  [ -z "$ALTTEXT" ]; then 
+		echo "" 
+		echo 'Sorry you gots to set Alt text' 
+		echo ""
+		echo "Try it again with Alt Text"
+		echo ""
+		exit 1;
 fi
 
 
+## Set tags by slug, can not get reliable terms in this way due to special character limits
+
+if [ -z "$5" ]; then
+	echo -n "What \"tags\" do you want to use? : (example: \"term1\", \"term2\", \"term3\") " && read TAGS 
+	## TODO:  Explain the slug reuse issue in the prompt...
+
+else
+	TAGS=$5
+
+fi
+
+# If I just hit return when I asked for the local file, we are going to move to my local repo to do this next part ELSE just use the local copy location I passed in
 
 if [ -z $LOCALCOPY ]; then
 
-	LOCALCOPY=/Users/user/localfolder
-	GITHUBREPO='https://raw.githubusercontent.com/user/master/remotefolder/' 
+	$LOCALCOPY=$LOCALREPO
 
 		cd ${LOCALCOPY}
+
 # I am assuming I in fact did a git push right before this step.  
-# So, let's check, and exit if not 
+# So, let's check to see if that is true and exit if not 
 
 GITSTATUS=$(git status)
 
@@ -73,7 +117,6 @@ GITCLEAN="On branch master
 Your branch is up to date with 'origin/master'.
 
 nothing to commit, working tree clean"
-
 
 	if [[ ${GITSTATUS} != ${GITCLEAN} ]]; then
 		echo "We are not committed.  Git yourself clean"
@@ -84,7 +127,7 @@ nothing to commit, working tree clean"
 	
 	
 
-# Get the loastest updated file name from the local directory and add it to the end of our github repo
+# Get the latest updated file name from the local directory and add it to the end of our github repo to form the address of the file's raw online
 
 	POSTGITHUBADDRESS=$GITHUBREPO$(ls -tp | grep -v /$ | head -1)
 
@@ -93,7 +136,7 @@ nothing to commit, working tree clean"
 	POSTTITLE=$(curl ${POSTGITHUBADDRESS} | head -1 )
 
 # Terminus uses WP-CLI to pop that body into a new post
-# in proecess grab the body and make that, well, the body for the post
+# in process grab the body and make that, well, the body for the post
 # assuming this works we should get a post ID number back in the returned message
 
 
@@ -101,54 +144,38 @@ nothing to commit, working tree clean"
 
 else
 
-###POST FROM LOCAL
+### If we fed in a file, just post from local supplied file
 
 	POSTTITLE=$(head -1 ${LOCALCOPY})
 
-
-
 # Terminus uses WP-CLI to pop that body into a new post
-# in proecess grab the body and make that, well, the body for the post
+# in process grab the body and make that, well, the body for the post
 # assuming this works we should get a post ID number back in the returned message
 
 
-	OUTPUT=$(cat ${LOCALCOPY} | sed -n '1!p' | terminus wp ${SITENAME}.${ENV} -- post create --post_author=1 --post_title="${POSTTITLE}" --count=1 --post_status=publish - )
-
+	POSTID=$(cat ${LOCALCOPY} | sed -n '1!p' | terminus wp ${SITENAME}.${ENV} -- post create --post_author=1 --post_title="${POSTTITLE}" --count=1 --post_status=publish - --porcelain)
 
 fi
 
-# OK now let's parse the actaual post id
-
-OUTPUT1=$(echo ${OUTPUT} | cut -d ' ' -f 4-)
-POSTID="${OUTPUT1%.*}"
-
-echo $POSTID
-
 # Update the permalink with the thing I manually asked for earlier
-# If blank, will default to null and permalink will be sanitized post title
 
 terminus wp ${SITENAME}.${ENV} -- post update ${POSTID} --post_name=${POSTNAME}
 
 
-#-------------TAGS SET
-#############
-############
-############ 
-
 #-------------Featured Image Section
 
+# Let's use the image you dragged in 
+# But if we didn't pass one in, use my face :) 
+
+
 if [ -z ${HEROIMAGE} ]; then
-    echo -e "No featured image set"
+    echo -e "No featured image set, defaulting to mcdwayne's picture"
+    terminus wp ${SITENAME}.${ENV} -- media import https://live-mcdwaynedotcom.pantheonsite.io/wp-content/uploads/2016/09/dwaynemic-300x300.jpeg --alt="Dwayne McDaneil holding a microphone wearing a Pantheon shirt" --post_id=${POSTID} --title="mcdwayne-mic" --featured_image
 
 else 
 
-# Let's use the image you dragged in 
-
-# BUT if we didn;t pass one in, we are done, so let's exit if HEROIMAGE == NULL
-
-# Using rsync here to push it up to the Dev environment, since that is the only one I can write to for now.
-
-
+# If we did pass an image in with Alt Text, let's use that instead
+# Using rsync here to push it up to the Dev environment, since that is the only one I can write to on Pantheon
 
 	rsync -rLvz --size-only --ipv4 --progress -e 'ssh -p 2222' ${HEROIMAGE} --temp-dir=~/tmp/ dev.${SITEUUID}@appserver.dev.${SITEUUID}.drush.in:files/
 
@@ -157,15 +184,16 @@ else
 
 	terminus wp ${SITENAME}.${ENV} -- media import https://dev-${SITENAME}.pantheonsite.io/wp-content/uploads/${HEROIMAGE##/*/} --alt="${ALTTEXT}" --post_id=${POSTID} --title="${HEROIMAGE##/*/}" --featured_image
 
-
-# Let's get the post GUID for the image, so we can ference it directly later
-
 fi
-
 
 # End "Featured image" section
 
+## Set tags
 
+	terminus wp ${SITENAME}.${ENV} -- post term add $POSTID post_tag $TAGS 
+
+## Where did this actually post, let's print it to the terminal  
+## Yes, I like new lines a lot, makes it easier to read output in my opinion
 
 echo ' '
 echo ' '
@@ -174,15 +202,40 @@ echo https://${ENV}-${SITENAME}.pantheonsite.io/${POSTNAME}
 echo ' '
 echo ' '
 echo ' '
-echo https://${ENV}-${SITENAME}.pantheonsite.io/${POSTNAME}
 
-####################
-####################
-# This section is an example of using my terminus plugin wpclonecontent to clone the content to the target environment
-# See: https://github.com/mcdwayne/terminus-wp-clone-content
+#####################################
+## From here on out is how to get from posting locally to production with testing inserted
+## Using ## notation from here down
+## This should let you use your code editor, like Sublime text or Atom to uncomment the whole thing and preserve the intended comments
 
+## well, turns out I need this again for BackstopJS to work as expected if hooking it in, so let's create a variable as well right now
+#ENVURL=https://${ENV}-${SITENAME}.pantheonsite.io/
+
+## Paranoid cache clear, sometimes caching is an issue, better to clear before testing
+
+terminus env:cc ${SITENAME}.${ENV}
+
+##### Let's behat test!
+
+## There is likely a better way to run this, but given the state of my machine and other ongoing projects, I felt it easier to just make a testing folder elsewhere on my local and just move into it for this part
+
+#cd /localfolderWithWordhatTestsDefined
+
+## Exit if this next section fails 
+#set -e
+
+## invoke WordHat, via Behat, to test for behavior
+## currently the .features files I use are stored here: https://github.com/mcdwayne/wordhat-features-demo
+
+#vendor/bin/behat --strict
+ 
+####################
+## This section is an example of using my terminus plugin wpclonecontent to clone the content to the target environment
+## See: https://github.com/mcdwayne/terminus-wp-clone-content
 
 # terminus wpclonecontent ${SITENAME}.${ENV} ${SITENAME}.test ${POSTID}
+
+## Yes, I do want to see that printed along with a bunch of line breaks in terminal
 
 # echo ' '
 # echo ' '
@@ -192,7 +245,51 @@ echo https://${ENV}-${SITENAME}.pantheonsite.io/${POSTNAME}
 # echo ' '
 # echo ' '
 
-# terminus wpclonecontent ${SITENAME}.${ENV} ${SITENAME}.live ${POSTID}
+## Yet again, I am going to need this for Backstop, so again, let's make a variable for ease later
+#TESTURL=https://test-${SITENAME}.pantheonsite.io/
+
+
+########
+## Enter the BackstopJS
+## I imagine a scenario where something visually will break between environments once I push, so I want to visually inspect that it did not
+## In my mind, nested blocks are the likely culprit, especially if we hit states where what works on Dev will not work on Test (which should be identical clone of live every time) due to a number of factors, like plugin version or activation
+
+### Now, there HAS to be a better path to this and I think it lies in updating another variable, but as for now, this just worked so I went with it
+### I am standing on the shoulders of giants here, mostly @ataylorme, Andrew Taylor and his amazing work, which was explained to me by @davidneedham, using this repo: 
+
+# cd ~/bin  ## this is where this lives for me. Not likely the smartest place in gerenal, but it works for me as this is main use case for this tool
+
+# ## Yep, overwriting the file as a way to dynamically set what BackstopJS is even testing.  Got a better way? Please open an issue or do a PR
+# cat <<EOF > ./includes/sitesToUpdate.js
+# const sitesToUpdate = {
+# 	'thissite': {
+# 		label : 'NewPost',
+# 		BackstopReferenceBaseUrl : "${ENVURL}",
+# 		BackstopTestUrl : "${TESTURL}",
+#           pathsToTest: [
+#             "${POSTNAME}"
+#             ]
+#           }
+#   };
+# export default sitesToUpdate;
+
+# EOF
+
+## OK, now let's actually invoke Backstop JS
+# npm run start 
+
+## Now, I could let the test finish and see if it is successful and if it is, then continue on
+## However, for my use case I wanted to test this and show it off on my real site with a manual ask every time to push to live. 
+## Not commenting every line but will do if unclear, open an issue
+
+# echo ' '
+# echo ' '
+# echo ' '
+# echo -n "Ready to push to live? (y/n)? "
+# read answer
+
+# if [ "$answer" != "${answer#[Yy]}" ] ;then
+#     terminus wpclonecontent ${SITENAME}.${ENV} ${SITENAME}.live ${POSTID}
 
 # echo ' '
 # echo ' '
@@ -202,9 +299,21 @@ echo https://${ENV}-${SITENAME}.pantheonsite.io/${POSTNAME}
 # echo ' '
 # echo ' '
 
-#######################
-#######################
+
+# else
+
+#     echo "Not pushing to live env"
+
+# fi
 
 
-echo "Thanks for using postitnow to post your post"
-echo "Thanks for using postitnow to post your post"
+# #######################
+# #######################
+
+
+
+# echo "Thanks for using postitnow to post your post"
+
+#####
+## Thanks for looking at the source code!  Please make it your own and embrace the 4 Freedoms of FOSS!!!
+#####
