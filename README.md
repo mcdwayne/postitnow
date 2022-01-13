@@ -10,7 +10,10 @@ I am going to ask for the following:
     > The Featured Image
 
 _writing gibberish_
+
 ![This is aflying fish](https://a-z-animals.com/media/2021/06/Flying-Fish-header.jpg)
+![Han shot first](https://popculturalstudies.files.wordpress.com/2017/11/han-shot-first-2.jpg)
+
 
 ## Requirements!!
 - Bash  (with cURL working)
