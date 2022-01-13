@@ -10,7 +10,6 @@ I am going to ask for the following:
     > The Featured Image
 
 
-
 ## Requirements!!
 - Bash  (with cURL working)
 
