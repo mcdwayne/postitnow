@@ -12,6 +12,8 @@ I am going to ask for the following:
 [Git Blog](https://www.gitkraken.com/blog)
 ![corgi](https://www.scotsman.com/webimg/b25lY21zOmU5ZGRiMzIyLTFhYzQtNGM5My04ZWUyLWNhOGQyYjc1NzljMjphNTU2N2JkYy1jNTRiLTQ0NTItODRhYy00NDMxNTY4ZDAwMTE=.jpg?width=2048&enable=upscale)
 
+Testing _italics_ and **bold**
+
 ## Requirements!!
 - Bash  (with cURL working)
 
